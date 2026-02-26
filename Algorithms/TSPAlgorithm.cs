@@ -1,7 +1,5 @@
 namespace TravelingSalesman.Algorithms;
 
-//Base class for all algorithms
-//TODO: Consider adding parallel execution support
 public abstract class TSPAlgorithm
 {
     protected List<PointF> Nodes { get; private set; } = [];
@@ -20,7 +18,7 @@ public abstract class TSPAlgorithm
 
     public void SetNodes(List<PointF> nodes)
     {
-        Nodes = [.. nodes];
+        Nodes = new List<PointF>(nodes);
     }
 
     public void SetCancellationToken(CancellationToken token)
@@ -29,6 +27,20 @@ public abstract class TSPAlgorithm
     }
 
     public abstract List<int> Solve();
+
+    /* Runs Solve() on a dedicated OS thread so each algorithm is truly isolated.
+    TaskCreationOptions.LongRunning bypasses the shared thread pool and provisions
+    a new thread, ensuring no two algorithms share CPU time on the same thread
+    and that elapsed-time measurements are fair across concurrent runs.*/
+    public Task<List<int>> SolveAsync(CancellationToken cancellationToken)
+    {
+        SetCancellationToken(cancellationToken);
+        return Task.Factory.StartNew(
+            Solve,
+            cancellationToken,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
+    }
 
     protected void ReportProgress(List<int> currentPath)
     {

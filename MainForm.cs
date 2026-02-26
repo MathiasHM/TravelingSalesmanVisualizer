@@ -1,3 +1,4 @@
+//Lasciate ogne speranza, voi ch'intrate
 using TravelingSalesman.Algorithms;
 using TravelingSalesman.Models;
 using TravelingSalesman.UI;
@@ -563,7 +564,7 @@ public class MainForm : Form
 
         var lblEditorHint = new Label
         {
-            Text = "💡 Left-click drag to move nodes • Left-click to add • Right-click to remove",
+            Text = "Left-click drag to move nodes • Left-click to add • Right-click to remove",
             Dock = DockStyle.Fill,
             Font = new Font("Segoe UI", 9, FontStyle.Italic),
             ForeColor = Color.FromArgb(100, 100, 100),
@@ -867,246 +868,168 @@ public class MainForm : Form
 
     private async void BtnSolveAll_Click(object? sender, EventArgs e)
     {
-        if (nodes.Count < 3)
+        if (sender is Button btn) btn.Enabled = false;
+        try
         {
-            MessageBox.Show("Please add at least 3 nodes.", "Error",
-                MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
-
-        var enabledAlgorithms = settings.EnabledAlgorithms
-            .Where(kvp => kvp.Value)
-            .Select(kvp => kvp.Key)
-            .ToList();
-
-        if (enabledAlgorithms.Count == 0)
-        {
-            MessageBox.Show("Please select at least one algorithm.", "Error",
-                MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
-
-        //Check for long-running algorithms
-        var warnings = AlgorithmMetadata.CheckForLongRunningAlgorithms(enabledAlgorithms, nodes.Count);
-        if (warnings.Count > 0)
-        {
-            var warningMessage = "⚠️ Performance Warning!\n\n" +
-                string.Join("\n\n", warnings) +
-                "\n\nDo you want to proceed anyway?";
-
-            var result = MessageBox.Show(warningMessage, "Long Runtime Expected",
-                MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
-
-            if (result == DialogResult.No)
+            if (nodes.Count < 3)
+            {
+                MessageBox.Show("Please add at least 3 nodes.", "Error",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
-        }
-
-        ClearResults();
-
-        if (fullscreenPanel != null)
-        {
-            ExitFullscreen();
-        }
-
-        foreach (var panel in algorithmPanels.Values)
-        {
-            panel.Visible = false;
-        }
-
-        foreach (var algoName in enabledAlgorithms)
-        {
-            if (algorithmPanels.TryGetValue(algoName, out var panel))
-            {
-                panel.Visible = true;
             }
-        }
 
-        tabControl.SelectedIndex = 1;
+            var enabledAlgorithms = settings.EnabledAlgorithms
+                .Where(kvp => kvp.Value)
+                .Select(kvp => kvp.Key)
+                .ToList();
 
-        cancellationTokenSource?.Dispose();
-        cancellationTokenSource = new CancellationTokenSource();
-        var cancellationToken = cancellationTokenSource.Token;
-
-        var tasks = new List<Task>();
-
-        foreach (var algoName in enabledAlgorithms)
-        {
-            if (algorithms.TryGetValue(algoName, out var algorithm))
+            if (enabledAlgorithms.Count == 0)
             {
-                var task = Task.Run(() =>
+                MessageBox.Show("Please select at least one algorithm.", "Error",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            //Check for long-running algorithms
+            var warnings = AlgorithmMetadata.CheckForLongRunningAlgorithms(enabledAlgorithms, nodes.Count);
+            if (warnings.Count > 0)
+            {
+                var warningMessage = "Performance Warning!\n\n" +
+                    string.Join("\n\n", warnings) +
+                    "\n\nDo you want to proceed anyway?";
+
+                var result = MessageBox.Show(warningMessage, "Long Runtime Expected",
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+
+                if (result == DialogResult.No)
+                    return;
+            }
+
+            ClearResults();
+
+            if (fullscreenPanel != null)
+            {
+                ExitFullscreen();
+            }
+
+            foreach (var panel in algorithmPanels.Values)
+            {
+                panel.Visible = false;
+            }
+
+            foreach (var algoName in enabledAlgorithms)
+            {
+                if (algorithmPanels.TryGetValue(algoName, out var panel))
                 {
-                    try
-                    {
-                        var sw = System.Diagnostics.Stopwatch.StartNew();
-                        algorithm.SetNodes(nodes);
-                        algorithm.SetCancellationToken(cancellationToken);
-
-                        if (algorithm is TwoOptAlgorithm twoOpt)
-                            twoOpt.MaxIterations = settings.TwoOptMaxIterations;
-                        else if (algorithm is ThreeOptAlgorithm threeOpt)
-                            threeOpt.MaxIterations = settings.ThreeOptMaxIterations;
-                        else if (algorithm is SimulatedAnnealingAlgorithm sa)
-                            sa.InitialTemperature = settings.SATemperature;
-                        else if (algorithm is GeneticAlgorithm ga)
-                        {
-                            ga.PopulationSize = settings.GAPopulationSize;
-                            ga.Generations = settings.GAGenerations;
-                        }
-                        else if (algorithm is AntColonyAlgorithm aco)
-                        {
-                            aco.Ants = settings.ACOAnts;
-                        }
-                        else if (algorithm is LinKernighanAlgorithm lk)
-                            lk.MaxIterations = settings.LKMaxIterations;
-                        else if (algorithm is TabuSearchAlgorithm tabu)
-                        {
-                            tabu.MaxIterations = settings.TabuMaxIterations;
-                            tabu.TabuTenure = settings.TabuTenure;
-                        }
-                        else if (algorithm is ParticleSwarmAlgorithm ps)
-                        {
-                            ps.Particles = settings.PSParticles;
-                            ps.Iterations = settings.PSIterations;
-                        }
-
-                        algorithm.OnProgressUpdate = (path) =>
-                        {
-                            if (cancellationToken.IsCancellationRequested) return;
-
-                            var distance = PathCalculator.CalculateDistance(path, nodes);
-                            var intermediateResult = new AlgorithmResult(path, distance, sw.ElapsedMilliseconds, "Running...");
-
-                            try
-                            {
-                                Invoke(() =>
-                                {
-                                    if (cancellationToken.IsCancellationRequested) return;
-
-                                    results[algoName] = intermediateResult;
-                                    if (algorithmPanels.TryGetValue(algoName, out var panel))
-                                    {
-                                        panel.SetResult(intermediateResult, nodes, false);
-                                    }
-                                    resultsGrid.UpdateResults(results);
-                                });
-                            }
-                            catch (ObjectDisposedException) { }
-                        };
-
-                        var finalPath = algorithm.Solve();
-                        sw.Stop();
-
-                        if (cancellationToken.IsCancellationRequested) return;
-
-                        algorithm.OnProgressUpdate = null;
-
-                        var finalDistance = PathCalculator.CalculateDistance(finalPath, nodes);
-                        var finalResult = new AlgorithmResult(finalPath, finalDistance, sw.ElapsedMilliseconds);
-
-                        try
-                        {
-                            Invoke(() =>
-                            {
-                                if (cancellationToken.IsCancellationRequested) return;
-
-                                results[algoName] = finalResult;
-                                if (algorithmPanels.TryGetValue(algoName, out var panel))
-                                {
-                                    panel.SetResult(finalResult, nodes, false);
-                                }
-                                resultsGrid.UpdateResults(results);
-                                statisticsPanel.UpdateStatistics(results, nodes.Count);
-                            });
-                        }
-                        catch (ObjectDisposedException) { }
-                    }
-                    catch (OperationCanceledException) { }
-                }, cancellationToken);
-
-                tasks.Add(task);
+                    panel.Visible = true;
+                }
             }
+
+            tabControl.SelectedIndex = 1;
+
+            cancellationTokenSource?.Dispose();
+            cancellationTokenSource = new CancellationTokenSource();
+            var cancellationToken = cancellationTokenSource.Token;
+
+            // Each algorithm gets its own dedicated OS thread via SolveAsync (LongRunning).
+            // The Select starts all of them concurrently; WhenAll waits for every one to finish.
+            var tasks = enabledAlgorithms
+                .Where(name => algorithms.ContainsKey(name))
+                .Select(name => RunAlgorithmAsync(algorithms[name], name, cancellationToken))
+                .ToList();
+
+            try
+            {
+                await Task.WhenAll(tasks);
+            }
+            catch (OperationCanceledException) { }
         }
+        finally
+        {
+            if (sender is Button btn2) btn2.Enabled = true;
+        }
+    }
+
+    private async Task RunAlgorithmAsync(TSPAlgorithm algorithm, string algoName, CancellationToken cancellationToken)
+    {
+        // Setup runs on the UI thread before the dedicated algorithm thread is created,
+        // satisfying the happens-before requirement for all fields Solve() will read.
+        algorithm.SetNodes(nodes);
+        ConfigureAlgorithmSettings(algorithm);
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+
+        // Called from the algorithm's background thread; Invoke marshals back to the UI thread.
+        algorithm.OnProgressUpdate = path =>
+        {
+            if (cancellationToken.IsCancellationRequested) return;
+            var distance = PathCalculator.CalculateDistance(path, nodes);
+            var intermediateResult = new AlgorithmResult(path, distance, sw.ElapsedMilliseconds, "Running...");
+            try
+            {
+                Invoke(() =>
+                {
+                    if (cancellationToken.IsCancellationRequested) return;
+                    results[algoName] = intermediateResult;
+                    if (algorithmPanels.TryGetValue(algoName, out var panel))
+                        panel.SetResult(intermediateResult, nodes, false);
+                    resultsGrid.UpdateResults(results);
+                });
+            }
+            catch (ObjectDisposedException) { }
+        };
 
         try
         {
-            await Task.WhenAll(tasks);
+            // SolveAsync runs Solve() on a dedicated OS thread (LongRunning).
+            var finalPath = await algorithm.SolveAsync(cancellationToken);
+            sw.Stop();
+            algorithm.OnProgressUpdate = null;
+
+            if (cancellationToken.IsCancellationRequested) return;
+
+            var finalDistance = PathCalculator.CalculateDistance(finalPath, nodes);
+            var finalResult = new AlgorithmResult(finalPath, finalDistance, sw.ElapsedMilliseconds);
+
+            results[algoName] = finalResult;
+            if (algorithmPanels.TryGetValue(algoName, out var panel))
+                panel.SetResult(finalResult, nodes, false);
+            resultsGrid.UpdateResults(results);
+            statisticsPanel.UpdateStatistics(results, nodes.Count);
         }
-        catch (OperationCanceledException) { }
-    }
-
-    private List<string> CheckForLongRunningAlgorithms(List<string> enabledAlgorithms, int nodeCount)
-    {
-        var warnings = new List<string>();
-
-        foreach (var algoName in enabledAlgorithms)
+        catch (OperationCanceledException)
         {
-            var estimate = EstimateRuntime(algoName, nodeCount);
-            if (estimate != null)
-            {
-                warnings.Add($"{algoName}: {estimate}");
-            }
+            sw.Stop();
+            algorithm.OnProgressUpdate = null;
         }
-
-        return warnings;
     }
 
-    private string? EstimateRuntime(string algorithmName, int n)
+    private void ConfigureAlgorithmSettings(TSPAlgorithm algorithm)
     {
-        return algorithmName switch
+        if (algorithm is TwoOptAlgorithm twoOpt)
+            twoOpt.MaxIterations = settings.TwoOptMaxIterations;
+        else if (algorithm is ThreeOptAlgorithm threeOpt)
+            threeOpt.MaxIterations = settings.ThreeOptMaxIterations;
+        else if (algorithm is SimulatedAnnealingAlgorithm sa)
+            sa.InitialTemperature = settings.SATemperature;
+        else if (algorithm is GeneticAlgorithm ga)
         {
-            "Brute Force" => n switch
-            {
-                >= 43 => "♾️ Expected completion: After the heat death of the universe ♾️\n(Seriously, the universe will end first)",
-                >= 42 => "You are asking the wrong question...",
-                >= 22 => "♾️ Expected completion: After the heat death of the universe ♾️\n(Seriously, the universe will end first)",
-                >= 21 => "Estimated runtime: Quintillions of years",
-                >= 20 => "Estimated runtime: Trillions of years",
-                >= 19 => "Estimated runtime: 200,000 years",
-                >= 18 => "Estimated runtime: 10,000 years",
-                >= 17 => "Estimated runtime: 8 months",
-                >= 16 => "Estimated runtime: 2 weeks",
-                >= 15 => "Estimated runtime: 1 day",
-                >= 14 => "Estimated runtime: 1-2 hours",
-                >= 13 => "Estimated runtime: 5-10 minutes",
-                _ => null
-            },
-
-            "Branch and Bound" => n switch //TODO: these are experimentially not accurate, do some tests
-            {
-                >= 22 => "♾️ Expected completion: After the heat death of the universe ♾️\n(At least no one will collect on the power bill)",
-                >= 20 => "Estimated runtime: Thousands of years",
-                >= 19 => "Estimated runtime: Several years\n(You'll forget why you started this)",
-                >= 18 => "Estimated runtime: Several months",
-                >= 17 => "Estimated runtime: Several weeks",
-                >= 16 => "Estimated runtime: Several days",
-                >= 15 => "Estimated runtime: 6-24 hours",
-                >= 14 => "Estimated runtime: 1-4 hours",
-                >= 13 => "Estimated runtime: 10-30 minutes",
-                >= 12 => "Estimated runtime: 1-5 minutes",
-                _ => null
-            },
-
-            _ => null
-        };
-    }
-
-    private double CalculateDistance(List<int> path)
-    {
-        if (path.Count == 0) return 0;
-
-        double total = 0;
-        for (int i = 0; i < path.Count - 1; i++)
-        {
-            total += Distance(nodes[path[i]], nodes[path[i + 1]]);
+            ga.PopulationSize = settings.GAPopulationSize;
+            ga.Generations = settings.GAGenerations;
         }
-        total += Distance(nodes[path[^1]], nodes[path[0]]);
-        return total;
-    }
-
-    private static double Distance(PointF p1, PointF p2)
-    {
-        double dx = p1.X - p2.X;
-        double dy = p1.Y - p2.Y;
-        return Math.Sqrt(dx * dx + dy * dy);
+        else if (algorithm is AntColonyAlgorithm aco)
+            aco.Ants = settings.ACOAnts;
+        else if (algorithm is LinKernighanAlgorithm lk)
+            lk.MaxIterations = settings.LKMaxIterations;
+        else if (algorithm is TabuSearchAlgorithm tabu)
+        {
+            tabu.MaxIterations = settings.TabuMaxIterations;
+            tabu.TabuTenure = settings.TabuTenure;
+        }
+        else if (algorithm is ParticleSwarmAlgorithm ps)
+        {
+            ps.Particles = settings.PSParticles;
+            ps.Iterations = settings.PSIterations;
+        }
     }
 }
