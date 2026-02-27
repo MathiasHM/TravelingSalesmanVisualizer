@@ -401,6 +401,12 @@ public class MainForm : Form
                     propertyInfo.SetValue(settings, (int)numeric.Value);
             };
 
+            numeric.TextChanged += (s, e) =>
+            {
+                if (decimal.TryParse(numeric.Text, out var val) && val > numeric.Maximum)
+                    numeric.Value = numeric.Maximum;
+            };
+
             layout.Controls.Add(label, 0, row);
             layout.Controls.Add(numeric, 1, row);
             row++;
@@ -1017,6 +1023,8 @@ public class MainForm : Form
             ga.PopulationSize = settings.GAPopulationSize;
             ga.Generations = settings.GAGenerations;
         }
+        else if (algorithm is RandomAlgorithm random)
+            random.Iterations = settings.RandomIterations;
         else if (algorithm is AntColonyAlgorithm aco)
             aco.Ants = settings.ACOAnts;
         else if (algorithm is LinKernighanAlgorithm lk)
